@@ -19,7 +19,8 @@ class Application(tornado.web.Application):
         # fetch data at interval
         main_loop = tornado.ioloop.IOLoop.instance()
         callback = partial(update, self)
-        scheduler = tornado.ioloop.PeriodicCallback(callback, 1000*60*2, io_loop=main_loop)
+        # Set updates to run every 22 minutes.
+        scheduler = tornado.ioloop.PeriodicCallback(callback, 1000*60*22, io_loop=main_loop)
         scheduler.start()
         # Initialize data
         update(self)

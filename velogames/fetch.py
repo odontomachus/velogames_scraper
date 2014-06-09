@@ -1,37 +1,19 @@
-
-# league url:
-# url: http://www.velogames.com/criterium-du-dauphine/2014/leaguescores.php?league=6162917
-# with stage
-# http://www.velogames.com/criterium-du-dauphine/2014/leaguescores.php?league=6162917&ga=13&st=1
-
-#team url:
-# http://www.velogames.com/criterium-du-dauphine/2014/teamroster.php?tid=5391e3157850d591
-# with stage
-# http://www.velogames.com/criterium-du-dauphine/2014/teamroster.php?tid=5391e3157850d591&st=1
-
-# league selector:
-# .tablesorter > tbody > tr
-# .tablesorter > tbody:nth-child(3) > tr:nth-child(1)
-
 import urllib2
-
 from StringIO import StringIO
 
 from lxml import etree as et
-
-# Run updates on a loop
-# tornado.ioloop.PeriodicCallback(update, 1000*600s)
 
 BASE_URL = 'http://www.velogames.com/criterium-du-dauphine/2014/'
 LEAGUE = 6162917
 
 def update(application, firsttime=False):
+    """ Update local data. """
     print("Running update")
-    updates = parse_league(LEAGUE, application.teams)
-    updates |= parse_league(LEAGUE, application.teams, application.stage)
+    if not parse_league(LEAGUE, application.teams):
+        return
+    updates = parse_league(LEAGUE, application.teams, application.stage)
     new_stage = parse_league(LEAGUE, application.teams, application.stage+1)
     while new_stage:
-        print "Checking stage {stage}".format(stage=application.stage+1)
         application.stage += 1
         if firsttime:
             new_stage = parse_league(LEAGUE, application.teams, application.stage+1)
@@ -43,7 +25,7 @@ def update(application, firsttime=False):
 def download(url):
     """ Download a url and return the parse tree's root.
     
-    url: url to be downloaded
+    @param url  url to be downloaded
     returns lxml.etree._Element
     """
     req = urllib2.urlopen(BASE_URL + url)
@@ -159,10 +141,3 @@ def parse_team(team, stage=None):
     # div.col-md-6:nth-child(2) > table:nth-child(1) > tbody:nth-child(1) > tr:nth-child(2) > td:nth-child(2)
     pass
         
-
-# @get('/update')
-# def get_update():
-#     update()
-
-# @get('/league')
-# @get('/team')
