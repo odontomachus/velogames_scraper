@@ -6,7 +6,6 @@ from tornado import ioloop
 
 from fetch import update
 
-
 class Application(tornado.web.Application):
     def __init__(self, **settings):
         self.teams = []
@@ -38,7 +37,7 @@ class LeagueHandler(tornado.web.RequestHandler):
 
         csv = "\n".join(
             map(lambda row: ",".join(
-                map(lambda x: str(x).replace('"', '""'), row[:-3])),
+                map(lambda x: str(x).replace('"', '""'), row)),
                 application.teams))
         self.write(csv+"\n")
         self.set_header("Content-Type", 'text/csv; charset="utf-8"')
