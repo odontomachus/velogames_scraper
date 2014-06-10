@@ -1,26 +1,20 @@
 import urllib2
 from StringIO import StringIO
+from collections import namedtuple
 
 from lxml import etree as et
 
 BASE_URL = 'http://www.velogames.com/criterium-du-dauphine/2014/'
-LEAGUE = 6162917
 
-def update(application, firsttime=False):
+def update(application):
     """ Update local data. """
-    print("Running update")
-    if not parse_league(LEAGUE, application.teams):
-        return
-    updates = parse_league(LEAGUE, application.teams, application.stage)
-    new_stage = parse_league(LEAGUE, application.teams, application.stage+1)
-    while new_stage:
-        application.stage += 1
-        if firsttime:
-            new_stage = parse_league(LEAGUE, application.teams, application.stage+1)
-        else:
-            break
+    stage = application.stage + 1
+    print("Checking stage {stage}".format(stage=stage))
+    while is_scored(stage) and parse_teams(application.teams, stage):
+        print("Updated stage {stage}".format(stage=stage))
+        application.stage = stage
+        stage += 1
     print("Done")
-    return updates or new_stage
 
 def download(url):
     """ Download a url and return the parse tree's root.
@@ -34,110 +28,147 @@ def download(url):
     tree = et.parse(html, parser)
     return tree.getroot()
 
-class Team(list):
-    name = 0
-    directeur = 1
-    global_rank = 2
-    rank = 3
-    score = 4
-    link = 5
-    tid = 6
-    riders = 7
-    stages = 16
+class Team:
+    def __init__(self, tid, name, directeur, riders, dy_pts,
+                 dy_lg, dy_ov, cu_pts, cu_lg, cu_ov, stage):
+        self.tid = tid
+        self.name = name
+        self.directeur = directeur
+        self.riders = riders
+        self.dy_pts = dy_pts
+        self.dy_lg = dy_lg
+        self.dy_ov = dy_ov
+        self.cu_pts = cu_pts
+        self.cu_lg = cu_lg
+        self.cu_ov = cu_ov
+        self.stage = stage
 
-class StageException(Exception):
-    pass
+    def __repr__(self):
+        return str((self.tid,
+               self.name,
+               self.directeur,
+               self.riders,
+               self.dy_pts,
+               self.dy_lg,
+               self.dy_ov,
+               self.cu_pts,
+               self.cu_lg,
+               self.cu_ov,
+               self.stage,
+           ))
 
-def parse_league(league, teams, stage=None):
-    """ Parse an etree and update team standings. """
+
+def get_teams(league):
+    """ Get list of teams in a league. """
     url = 'leaguescores.php?league={league}'.format(league=league)
-    # add stage parameters
-    url += '&ga=13&st={stage}'.format(stage=stage) if stage else ""
-
-    try:
-        root = download(url)
-    except Exception as e:
-        # unable to download
-        return False
-
-    updates = False
-    rows = root.xpath('//table//tr')
-    # no results
-    if not rows:
-        return False
-    rows.pop(0) # remove header
-
-    if stage:
-        stage_index = Team.stages+3*stage-3
-
-    # iterate over team members
+    root = download(url)
+    rows = root.xpath("//table//tr[position()>1]")
+    teams = []
     for row in rows:
-        link = row[1][0].attrib['href']
-        # Team id
-        tid = link[19:] 
-        team = filter(lambda x: x[Team.tid] == tid, teams)
-        team = team.pop(0) if team else None
-        score = int(row[4].text) #score
+        a = row.xpath("./td[1]/a")[0]
+        tid =  a.attrib['href'][19:]
+        team = Team(
+            tid, #team id
+            row[1][0].text, #team name
+            row[2].text, #directeur,
+            None, # rider ids
+            [], # daily points,
+            [], # daily league position,
+            [], # daily overall position,
+            [], # cumulative points
+            [], # cumulative league position
+            [], # cumulative overall position
+            0)
+        teams.append(team)
+    return teams
 
-        # first time we see team
-        if not team:
-            if stage:
-                raise StageException("Teams must be introduced in overall parse.")
-            teams.append(Team((
-                row[1][0].text, #team name
-                row[2].text, #director,
-                0, # global rank
-                0, # rank
-                score,
-                BASE_URL + link, #team link
-                tid, #team id
-                0, 0, 0, 0, 0, 0, 0, 0, 0, # riders
-            )))
-            updates = True
-        # overall
-        elif not stage:
-            updates = updates or (team[Team.score] != score)
-            team[Team.score] = score
-        else:
-            # add new slots for stage results
-            if len(team) <= stage_index:
-                team.extend((0,0,0))
-            updates = updates or (team[stage_index] != score)
-            team[stage_index] = score
-            team[stage_index+1] = parse_team(team[Team.tid])
-
-    # no changes, nothing to do
-    if not updates:
+def is_scored(stage):
+    """ Check whether stage has been scored yet. """
+    try:
+        root = download('teamscore.php?ga=13&st={stage}'.format(stage=stage))
+        cell = int(root.xpath("//table//tr[2]/td[last()]").pop().text)
+    except Exception as e:
         return False
+    return cell > 0
 
-    # Calculate rankings
-    if not stage:
-        teams.sort(key=lambda x: x[Team.score], reverse=True)
-        rank = 0
-        score = -1
-        for team in teams:
-            # update league rank (different from shown rank due to
-            # equal points ranking)
-            if team[Team.score] != score:
-                score = team[Team.score]
-                rank += 1
-            team[Team.rank] = rank
-            team[Team.global_rank] = parse_team(team[Team.tid])
+def parse_teams(teams, stage):
+    """ Update each team and calculate team rankings. """
+    # iterate over team members
+    for team in teams:
+        tid = team.tid
 
-    else:
-        # sort by stage results
-        stage_results = sorted(teams, key=lambda x: x[stage_index], reverse=True)
-        rank = 0
-        score = -1
-        for team in stage_results:
-            if team[stage_index] != score:
-                score = team[stage_index]
-                rank += 1
-            team[stage_index+2] = rank
+        riders, dy_pts, cu_pts, dy_ov, cu_ov = parse_team(team.tid, stage)
+        try:
+            riders, dy_pts, cu_pts, dy_ov, cu_ov = parse_team(team.tid, stage)
+        except Exception as e:
+            return False
+
+        # @TODO quick hack because I missed the first stage
+        if stage == 1:
+            cu_pts, cu_ov = dy_pts, dy_ov
+
+        team.riders = riders
+        # adding new values
+        if len(team.dy_pts) < stage:
+            team.dy_pts.append(dy_pts)
+            team.cu_pts.append(cu_pts)
+            team.dy_lg.append(0)
+            team.cu_lg.append(0)
+            team.dy_ov.append(dy_ov)
+            team.cu_ov.append(cu_ov)
+        # updating values
+        else:
+            team.dy_pts[stage-1] = dy_pts
+            team.cu_pts[stage-1] = cu_pts
+            team.dy_ov[stage-1] = dy_ov
+            team.cu_ov[stage-1] = cu_ov
+
+    # Calculate daily league standings
+    teams.sort(key=lambda x: x.dy_ov[stage-1], reverse=True)
+    rank = count = 0
+    score = -1
+    for team in teams:
+        # update league rank (different from shown rank due to
+        # equal points ranking)
+        count += 1
+        if team.dy_ov[stage-1] != score:
+            score = team.dy_ov[stage-1]
+            rank = count
+        team.dy_lg[stage-1] = rank
+
+    # Calculate cumulative league standings
+    teams.sort(key=lambda x: x.cu_ov[stage-1], reverse=True)
+    rank = count = 0
+    score = -1
+    for team in teams:
+        # update league rank (different from shown rank due to
+        # equal points ranking)
+        count += 1
+        if team.cu_ov[stage-1] != score:
+            score = team.cu_ov[stage-1]
+            rank = count
+        team.cu_lg[stage-1] = rank
 
     return True
 
-def parse_team(team, stage=None):
-    # div.col-md-6:nth-child(2) > table:nth-child(1) > tbody:nth-child(1) > tr:nth-child(2) > td:nth-child(2)
-    pass
-        
+
+def parse_team(team, stage):
+    root = download("teamrosterstage.php?tid={team}&st={stage}".format(team=team, stage=stage))
+    tables = root.xpath("//table")
+
+    # Extract info from page (top right table with scores)
+    info_cells = tables[1].xpath(".//tr[position()<5]/td[last()]")
+    cu_points, cu_overall, dy_points, dy_overall = map(lambda cell: int(cell.text), info_cells)
+
+    rider_urls = tables[2].xpath(".//tr[position()>1]/td[1]/a")
+    riders = tuple(map(lambda a: a.attrib['href'][-8:], rider_urls))
+    
+    return (
+        (0,)*9, # riders
+        dy_points,
+        cu_points,
+        dy_overall,
+        cu_overall,
+    )
+
+
