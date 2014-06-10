@@ -27,6 +27,7 @@ class Application(tornado.web.Application):
         self.stage = 0
         handlers = [
             (r'/league/(?P<method>daily|cumulative)/(?P<var>points|league|overall)', LeagueHandler),
+            (r'/league/status', StatusHandler)
         ]
         tornado.web.Application.__init__(self, handlers, **settings)
 
@@ -60,9 +61,8 @@ def escape_csv(input):
 
 class LeagueHandler(tornado.web.RequestHandler):
     """ Handler for league scores. """
-
     def get(self, method, var):
-        """ Write home page. """
+        """ Write csvs with data from league. """
         mapping = {
             "daily": "dy",
             "cumulative": "cu",
@@ -73,11 +73,12 @@ class LeagueHandler(tornado.web.RequestHandler):
 
         header = '"Team ID","Team Name",Directeur,'
         for day in range(application.stage):
-            header += "Day {day}".format(day=day+1)
+            header += "Day {day},".format(day=day+1)
+
+        self.write(header+"\n")
 
         # no udpates yet
         if not application.stage:
-            self.write(header+"\n")
             return
 
         attr = mapping[method] + "_" + mapping[var]
@@ -94,6 +95,14 @@ class LeagueHandler(tornado.web.RequestHandler):
 
         self.write(csv+"\n")
         self.set_header("Content-Type", 'text/csv; charset="utf-8"')
+
+class StatusHandler(tornado.web.RequestHandler):
+    """ Print for stage results. """
+    def get(self):
+        """ Get latest results. """
+        self.write("Results after stage {stage}<br />\n".format(stage=application.stage))
+        for row in application.teams:
+            self.write(" ".join((row.name, row.directeur, str(row.cu_pts[-1]))) + "</br>\n")
 
 
 application = Application()
