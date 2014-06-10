@@ -97,19 +97,19 @@ def parse_teams(teams, stage):
     for team in teams:
         tid = team.tid
 
-        riders, dy_pts, cu_pts, dy_ov, cu_ov = parse_team(team.tid, stage)
         try:
             riders, dy_pts, cu_pts, dy_ov, cu_ov = parse_team(team.tid, stage)
         except Exception as e:
             return False
-
+        
         # @TODO quick hack because I missed the first stage
         if stage == 1:
             cu_pts, cu_ov = dy_pts, dy_ov
 
         team.riders = riders
         # adding new values
-        if len(team.dy_pts) < stage:
+        if team.stage < stage:
+            team.stage = stage
             team.dy_pts.append(dy_pts)
             team.cu_pts.append(cu_pts)
             team.dy_lg.append(0)
@@ -124,28 +124,28 @@ def parse_teams(teams, stage):
             team.cu_ov[stage-1] = cu_ov
 
     # Calculate daily league standings
-    teams.sort(key=lambda x: x.dy_ov[stage-1], reverse=True)
+    teams.sort(key=lambda x: x.dy_pts[stage-1], reverse=True)
     rank = count = 0
     score = -1
     for team in teams:
         # update league rank (different from shown rank due to
         # equal points ranking)
         count += 1
-        if team.dy_ov[stage-1] != score:
-            score = team.dy_ov[stage-1]
+        if team.dy_pts[stage-1] != score:
+            score = team.dy_pts[stage-1]
             rank = count
         team.dy_lg[stage-1] = rank
 
     # Calculate cumulative league standings
-    teams.sort(key=lambda x: x.cu_ov[stage-1], reverse=True)
+    teams.sort(key=lambda x: x.cu_pts[stage-1], reverse=True)
     rank = count = 0
     score = -1
     for team in teams:
         # update league rank (different from shown rank due to
         # equal points ranking)
         count += 1
-        if team.cu_ov[stage-1] != score:
-            score = team.cu_ov[stage-1]
+        if team.cu_pts[stage-1] != score:
+            score = team.cu_pts[stage-1]
             rank = count
         team.cu_lg[stage-1] = rank
 
@@ -164,7 +164,7 @@ def parse_team(team, stage):
     riders = tuple(map(lambda a: a.attrib['href'][-8:], rider_urls))
     
     return (
-        (0,)*9, # riders
+        riders,
         dy_points,
         cu_points,
         dy_overall,

@@ -13,6 +13,15 @@ from fetch import (
 
 LEAGUE = 6162917
 
+def update_cache(application, *args, **kwargs):
+    ret = update(application, *args, **kwargs)
+    try:
+        with open("team_cache.pickle", "wb") as tc:
+            pickle.dump((application.teams, application.teams[0].stage), tc)
+    except Exception as e:
+        pass
+    
+
 class Application(tornado.web.Application):
     def __init__(self, **settings):
         self.stage = 0
@@ -23,39 +32,66 @@ class Application(tornado.web.Application):
 
         # fetch data at interval
         main_loop = tornado.ioloop.IOLoop.instance()
-        callback = partial(update, self)
+        callback = partial(update_cache, self)
         # Set updates to run every 22 minutes.
         scheduler = tornado.ioloop.PeriodicCallback(callback, 1000*60*22, io_loop=main_loop)
         scheduler.start()
         # Initialize data
-        self.teams = get_teams(LEAGUE)
-        update(self)
+        try:
+            with open("team_cache.pickle", "rb") as tc:
+                self.teams, self.stage = pickle.load(tc)
+        except Exception as e:
+            self.teams = get_teams(LEAGUE)
+            try:
+                with open("team_cache.pickle", "wb") as tc:
+                    pickle.dump((self.teams, 0), tc)
+            except Exception as e:
+                pass
 
+        update_cache(self)
+
+def escape_csv(input):
+    input = str(input)
+    if '"' in input:
+        input = '"' + input.replace('"', '""') + '"'
+    if ',' in input:
+        input = '"' + input + '"'
+    return input
 
 class LeagueHandler(tornado.web.RequestHandler):
     """ Handler for league scores. """
 
     def get(self, method, var):
         """ Write home page. """
-        print application.teams
+        mapping = {
+            "daily": "dy",
+            "cumulative": "cu",
+            "points": "pts",
+            "league": "lg",
+            "overall": "ov",
+        }
 
-        header = '"Team Name",Directeur,tid,'
+        header = '"Team ID","Team Name",Directeur,'
         for day in range(application.stage):
-            header += "day {day}".format(day=day+1)
+            header += "Day {day}".format(day=day+1)
 
         # no udpates yet
         if not application.stage:
             self.write(header+"\n")
             return
 
+        attr = mapping[method] + "_" + mapping[var]
+
         rows = []
         for team in application.teams:
-            pass
+            rows.append([team.tid, team.name, team.directeur] + \
+                  getattr(team, attr))
 
         csv = "\n".join(
             map(lambda row: ",".join(
-                map(lambda x: str(x).replace('"', '""'), row)),
+                map(lambda x: escape_csv(x), row)),
                 rows))
+
         self.write(csv+"\n")
         self.set_header("Content-Type", 'text/csv; charset="utf-8"')
 
