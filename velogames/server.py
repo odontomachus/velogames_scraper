@@ -11,7 +11,7 @@ from fetch import (
     get_teams,
 )
 
-LEAGUE = 6162917
+LEAGUE = 12165757
 
 def update_cache(application, *args, **kwargs):
     ret = update(application, *args, **kwargs)
@@ -108,5 +108,5 @@ class StatusHandler(tornado.web.RequestHandler):
 application = Application()
 
 if __name__ == "__main__":
-    application.listen(8080)
+    application.listen(8081)
     tornado.ioloop.IOLoop.instance().start()
