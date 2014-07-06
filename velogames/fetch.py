@@ -4,7 +4,7 @@ from collections import namedtuple
 
 from lxml import etree as et
 
-BASE_URL = 'http://www.velogames.com/tour-de-suisse/2014/'
+BASE_URL = 'http://www.velogames.com/tour-de-france/2014/'
 
 def update(application):
     """ Update local data. """
@@ -153,22 +153,31 @@ def parse_teams(teams, stage):
 
 
 def parse_team(team, stage):
-    root = download("teamrosterstage.php?tid={team}&st={stage}".format(team=team, stage=stage))
-    tables = root.xpath("//table")
+    root = download("teamroster.php?tid={team}&ga=13&st={stage}".format(team=team, stage=stage))
 
-    # Extract info from page (top right table with scores)
-    info_cells = tables[1].xpath(".//tr[position()<5]/td[last()]")
-    cu_points, cu_overall, dy_points, dy_overall = map(lambda cell: int(cell.text), info_cells)
 
-    rider_urls = tables[2].xpath(".//tr[position()>1]/td[1]/a")
-    riders = tuple(map(lambda a: a.attrib['href'][-8:], rider_urls))
-    
-    return (
-        riders,
-        dy_points,
-        cu_points,
-        dy_overall,
-        cu_overall,
-    )
+    try:
+        # Extract info from page (top right table with scores)
+        info_cells = root.xpath("//div[@id='home_post_cont']//div[@class='cat-posts-trending']//div[@class='cat_post_inner']/div[position()>4]/div[position()=2]//a")
+        cu_points, cu_overall, dy_points, dy_overall = map(lambda cell: int(cell.text), info_cells)
 
+        rider_urls = root.xpath("//table[position()=1]//a")
+        riders = tuple(map(lambda a: a.attrib['href'][-8:], rider_urls))
+
+        return (
+            riders,
+            dy_points,
+            cu_points,
+            dy_overall,
+            cu_overall,
+        )
+    except:
+        return (
+            tuple([0]*9),
+            0,
+            0,
+            0,
+            0,
+            0
+        )
 
