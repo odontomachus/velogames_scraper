@@ -62,7 +62,7 @@ def get_teams(league):
     """ Get list of teams in a league. """
     url = 'leaguescores.php?league={league}'.format(league=league)
     root = download(url)
-    rows = root.xpath("//table//tr[position()>1]")
+    rows = root.xpath("//table//tr")[1:]
     teams = []
     for row in rows:
         a = row.xpath("./td[1]/a")[0]
