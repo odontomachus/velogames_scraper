@@ -11,7 +11,7 @@ from fetch import (
     get_teams,
 )
 
-LEAGUE = 27033755
+LEAGUE = 18233834
 
 def update_cache(application, *args, **kwargs):
     ret = update(application, *args, **kwargs)

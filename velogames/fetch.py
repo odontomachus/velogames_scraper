@@ -4,7 +4,7 @@ from collections import namedtuple
 
 from lxml import etree as et
 
-BASE_URL = 'http://www.velogames.com/tour-de-france/2014/'
+BASE_URL = 'http://www.velogames.com/vuelta-a-espana/2014/'
 
 def update(application):
     """ Update local data. """
